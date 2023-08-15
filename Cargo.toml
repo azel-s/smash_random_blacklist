@@ -1,0 +1,31 @@
+[package]
+name = "smashline_custom_random"
+version = "0.1.0"
+authors = ["Azel", "Coolsonickirby", "hdr-dev-team"]
+edition = "2021"
+
+[package.metadata.skyline]
+titleid = "01006A800016E000"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+skyline = "0.2.1"
+skyline_smash = { git = "https://github.com/blu-dev/skyline-smash.git", features = [
+    "weak_l2cvalue",
+] }
+smash_script = { git = "https://github.com/blu-dev/smash-script.git", branch = "development" }
+smashline = { git = "https://github.com/blu-dev/smashline.git", branch = "development" }
+smash_singletons = { git = "https://github.com/WuBoytH/smash_singletons.git" }
+rand = { git = "https://github.com/skyline-rs/rand" }
+ninput = { git = "https://github.com/blu-dev/ninput" }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+opt-level = 'z'
+panic = "abort"
+lto = true
+codegen-units = 1
