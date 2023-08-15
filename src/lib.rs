@@ -1,7 +1,7 @@
 #![feature(concat_idents, proc_macro_hygiene)]
 #![allow(unused_macros)]
 
-mod random;
+// mod random;
 mod name;
 
 #[skyline::main(name = "smashline_custom_random")]
