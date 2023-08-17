@@ -1,7 +1,7 @@
 use rand::prelude::SliceRandom;
 use rand::Rng;
 
-use crate::{name, RANDOM_ALLOW_CONFIG_DATA};
+use crate::{name, RANDOM_WHITELIST_CONFIG};
 
 static REGULAR_CHARA_HASHES: &[u64] = &[
     smash::hash40("ui_chara_bayonetta"),
@@ -95,15 +95,10 @@ static PT_CHARA_HASHES: &[u64] = &[
     smash::hash40("ui_chara_pfushigisou"),
 ];
 
-static mut COUNTER: usize = 0;
-
 static mut LAST_FIGHTER_FOUND: u64 = 0x0;
-static mut LAST_FIGHTER2_FOUND: u64 = 0x0;
+static mut LAST_FIGHTER_SUB_FOUND: u64 = 0x0;
 
 static mut WAS_RANDOM_SELECTION: bool = false;
-
-static mut WAS_RANDOM: bool = false;
-static mut IS_PRE_ENTRY: bool = false;
 
 const HASH_MASK: u64 = 0xFF_FFFFFFFF;
 const KEY_MASK: u64 = 0xFFFFFF_0000000000;
@@ -117,22 +112,18 @@ fn key(entry: u64) -> u64 {
     entry & KEY_MASK
 }
 
-//#[skyline::hook(offset = 0x1a13780, inline)]
 #[skyline::hook(offset = 0x1a13770, inline)]
 unsafe fn change_random_early(ctx: &mut skyline::hooks::InlineCtx) {
-    let player_id = (*(*(ctx.registers[21].x.as_ref() as *const u64) as *const u64) + 0x150) as *const u8;
-    //let player_id = ((ctx.registers[21].x.as_ref()) + 0x150) as *const u8;
-    
-    let player_tag_index = name::PLAYER_ID_TAGS[*player_id as usize];
-    let player_tag = name::get_tag_from_save(player_tag_index);
+    let player_id =
+        (*(*(ctx.registers[21].x.as_ref() as *const u64) as *const u64) + 0x150) as *const u8;
 
-    println!("[Random-Allow] ID: {}, Index: {}, Tag: {}", *player_id, player_tag_index, player_tag);
-    println!("{:?}", name::PLAYER_ID_TAGS);
+    let player_tag_index = name::PLAYER_ID_TAGS_INDEXES[*player_id as usize];
+    let player_tag = name::get_tag_from_save(player_tag_index);
 
     let mut hashes: Vec<u64> = Vec::new();
 
-    if (RANDOM_ALLOW_CONFIG_DATA.0.contains_key(&player_tag)) {
-        hashes = RANDOM_ALLOW_CONFIG_DATA
+    if RANDOM_WHITELIST_CONFIG.0.contains_key(&player_tag) {
+        hashes = RANDOM_WHITELIST_CONFIG
             .0
             .get(&player_tag)
             .unwrap()
@@ -142,31 +133,26 @@ unsafe fn change_random_early(ctx: &mut skyline::hooks::InlineCtx) {
             .collect::<Vec<u64>>();
     }
 
-    if (hashes.is_empty()) {
+    if hashes.is_empty() {
         hashes = REGULAR_CHARA_HASHES.to_vec();
     }
 
     let obj = *ctx.registers[23].x.as_ref() as *mut u64;
     let obj = *(obj as *mut *mut u64).add(1);
-    println!("Entering change_random_early");
-    let ignore_random = ninput::any::is_down_any(ninput::Buttons::ZL | ninput::Buttons::ZR);
-    if ignore_random {
-        println!("Ignoring the melee random selection!");
-    }
 
     let main_chara: u64 = *obj.add(0x200 / 0x8);
     let sub_chara = *obj.add(0x208 / 0x8);
 
-    if !ignore_random && (is_random(main_chara) || is_random(sub_chara)) {
-        println!("The random pane was selected");
-
+    if !ninput::any::is_down_any(ninput::Buttons::ZL | ninput::Buttons::ZR)
+        && (is_random(main_chara) || is_random(sub_chara))
+    {
         let chara_hash = hashes
             .choose(&mut rand::thread_rng())
             .copied()
             .unwrap_or(RANDOM_HASH);
 
         LAST_FIGHTER_FOUND = chara_hash | key(main_chara);
-        LAST_FIGHTER2_FOUND = if chara_hash == smash::hash40("ui_chara_ptrainer") {
+        LAST_FIGHTER_SUB_FOUND = if chara_hash == smash::hash40("ui_chara_ptrainer") {
             PT_CHARA_HASHES
                 .choose(&mut rand::thread_rng())
                 .copied()
@@ -176,10 +162,6 @@ unsafe fn change_random_early(ctx: &mut skyline::hooks::InlineCtx) {
             chara_hash | key(sub_chara)
         };
 
-        println!("Main character: {:#x}", LAST_FIGHTER_FOUND);
-        println!("Sub character: {:#x}", LAST_FIGHTER2_FOUND);
-
-        println!("Setting x24 to {:#x}", *obj.add(0x200 / 0x8));
         *ctx.registers[24].x.as_mut() = LAST_FIGHTER_FOUND;
         WAS_RANDOM_SELECTION = true;
     } else {
@@ -187,66 +169,35 @@ unsafe fn change_random_early(ctx: &mut skyline::hooks::InlineCtx) {
     }
 }
 
-// only runs on random pane selected
 #[skyline::hook(offset = 0x1a0ca40)]
 unsafe fn decide_fighter(arg1: u64, arg2: u64, arg3: u64, arg4: u64) -> u64 {
-    println!("Entering decide_fighter");
-    if !WAS_RANDOM_SELECTION {
-        println!("decide_fighter called when the selection was not random");
+    if WAS_RANDOM_SELECTION {
+        let p_main_chara = (arg1 as *mut u64).add(2);
+        let p_sub_chara = (arg1 as *mut u64).add(3);
+
+        if WAS_RANDOM_SELECTION && (is_random(*p_main_chara) || is_random(*p_sub_chara)) {
+            *p_main_chara = LAST_FIGHTER_FOUND;
+            *p_sub_chara = LAST_FIGHTER_SUB_FOUND;
+        }
+
+        WAS_RANDOM_SELECTION = false;
     }
-
-    let p_main_chara = (arg1 as *mut u64).add(2);
-    let p_sub_chara = (arg1 as *mut u64).add(3);
-
-    if WAS_RANDOM_SELECTION && (is_random(*p_main_chara) || is_random(*p_sub_chara)) {
-        *p_main_chara = LAST_FIGHTER_FOUND;
-        *p_sub_chara = LAST_FIGHTER2_FOUND;
-    }
-    println!("Decided on fighter: {:#x}", *p_main_chara);
-
-    WAS_RANDOM_SELECTION = false;
-    println!("Cleared random selection flag");
 
     call_original!(arg1, arg2, arg3, arg4)
 }
 
-// Decide costume slot, so leave this be?
 #[skyline::hook(offset = 0x1a1c030)]
 unsafe fn copy_fighter_info2(dest: u64, src: u64) {
-    let src_obj = *(src as *mut *mut u64).add(1);
-    let src_obj = src_obj.add(0x1F0 / 8);
-    println!("Entering copy_fighter_info2");
-
     if WAS_RANDOM_SELECTION {
-        *(src_obj as *mut u32).add(8) = rand::thread_rng().gen::<u32>() % 8;
+        let src_obj = *(src as *mut *mut u64).add(1);
+        let src_obj = src_obj.add(0x1F0 / 8);
 
-        println!(
-            "Randomly selected slot to be {}",
-            *(src_obj as *mut u32).add(8)
-        );
+        *(src_obj as *mut u32).add(8) = rand::thread_rng().gen::<u32>() % 8;
     }
+
     call_original!(dest, src);
 }
 
-#[skyline::hook(offset = 0x1797ff8, inline)]
-unsafe fn fix_chara_replace(ctx: &skyline::hooks::InlineCtx) {
-    let ptr1 = *ctx.registers[0].x.as_ref() as *mut u64;
-    let ptr2 = *ctx.registers[1].x.as_ref() as *mut u64;
-
-    *ptr2.add(0x2) = *ptr1.add(0x2);
-    *ptr2.add(0x3) = *ptr1.add(0x3);
-    *ptr2.add(0x4) = *ptr1.add(0x4);
-}
-
 pub fn install() {
-    skyline::install_hooks!(
-        change_random_early,
-        decide_fighter,
-        copy_fighter_info2,
-        fix_chara_replace // pre_entry_assign
-    );
-
-    unsafe {
-        // skyline::patching::nop_data(0x1797ff8);
-    }
+    skyline::install_hooks!(change_random_early, decide_fighter, copy_fighter_info2);
 }

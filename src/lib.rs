@@ -1,31 +1,28 @@
 #![feature(concat_idents, proc_macro_hygiene)]
 #![allow(unused_macros)]
 
-use std::thread;
 use config::UserConfig;
 use once_cell::sync::Lazy;
 
 mod config;
-mod random;
 mod name;
+mod random;
 
-pub static mut RANDOM_ALLOW_CONFIG_DATA: Lazy<UserConfig> = Lazy::new(|| UserConfig(std::collections::HashMap::new()));
+pub static mut RANDOM_WHITELIST_CONFIG: Lazy<UserConfig> =
+    Lazy::new(|| UserConfig(std::collections::HashMap::new()));
 
-#[skyline::main(name = "smashline_custom_random")]
+#[skyline::main(name = "random_whitelist")]
 pub fn main() {
     let mythread = std::thread::spawn(|| unsafe {
         match UserConfig::load() {
-            Some(something) => {
-                unsafe {
-                    println!("[Random-Allow] {:?}", something);
-                    *RANDOM_ALLOW_CONFIG_DATA = something;
+            Some(whitelist) => {
+                *RANDOM_WHITELIST_CONFIG = whitelist;
 
-                    random::install();
-                    name::install();
-                }
-            },
+                name::install();
+                random::install();
+            }
             None => {
-                println!("[Random-Allow] No config found, plugin will not hook functions.")
+                println!(">[Random-Whitelist]: No config found, plugin will not hook functions.")
             }
         }
     });
