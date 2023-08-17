@@ -1,4 +1,3 @@
-use crate::StageKind;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -8,12 +7,12 @@ pub struct Entry {
     pub allow: Vec<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct UserConfig(pub HashMap<String, Entry>);
 
 impl UserConfig {
     pub fn load() -> Option<UserConfig> {
-        match std::fs::read_to_string("sd:/ultimate/random-allow-config.toml") {
+        match std::fs::read_to_string("sd:/ultimate/random-allow.toml") {
             Ok(data) => match toml::from_str(&data) {
                 Ok(res) => Some(res),
                 Err(err) => {
@@ -26,5 +25,7 @@ impl UserConfig {
                 None
             }
         }
+        // let a = std::fs::read_to_string("sd:/ultimate/random-allow.toml").unwrap();
+        // toml::from_str::<UserConfig>(&a).unwrap();
     }
 }

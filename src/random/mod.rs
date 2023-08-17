@@ -1,6 +1,8 @@
 use rand::prelude::SliceRandom;
 use rand::Rng;
 
+use crate::{name, RANDOM_ALLOW_CONFIG_DATA};
+
 static REGULAR_CHARA_HASHES: &[u64] = &[
     smash::hash40("ui_chara_bayonetta"),
     smash::hash40("ui_chara_captain"),
@@ -115,11 +117,34 @@ fn key(entry: u64) -> u64 {
     entry & KEY_MASK
 }
 
-
 //#[skyline::hook(offset = 0x1a13780, inline)]
 #[skyline::hook(offset = 0x1a13770, inline)]
 unsafe fn change_random_early(ctx: &mut skyline::hooks::InlineCtx) {
-    let player_id = (*(ctx.registers[21].x.as_ref()) + 0x150) as *const u8;
+    let player_id = (*(*(ctx.registers[21].x.as_ref() as *const u64) as *const u64) + 0x150) as *const u8;
+    //let player_id = ((ctx.registers[21].x.as_ref()) + 0x150) as *const u8;
+    
+    let player_tag_index = name::PLAYER_ID_TAGS[*player_id as usize];
+    let player_tag = name::get_tag_from_save(player_tag_index);
+
+    println!("[Random-Allow] ID: {}, Index: {}, Tag: {}", *player_id, player_tag_index, player_tag);
+    println!("{:?}", name::PLAYER_ID_TAGS);
+
+    let mut hashes: Vec<u64> = Vec::new();
+
+    if (RANDOM_ALLOW_CONFIG_DATA.0.contains_key(&player_tag)) {
+        hashes = RANDOM_ALLOW_CONFIG_DATA
+            .0
+            .get(&player_tag)
+            .unwrap()
+            .allow
+            .iter()
+            .map(|x| smash::hash40(x))
+            .collect::<Vec<u64>>();
+    }
+
+    if (hashes.is_empty()) {
+        hashes = REGULAR_CHARA_HASHES.to_vec();
+    }
 
     let obj = *ctx.registers[23].x.as_ref() as *mut u64;
     let obj = *(obj as *mut *mut u64).add(1);
@@ -135,7 +160,7 @@ unsafe fn change_random_early(ctx: &mut skyline::hooks::InlineCtx) {
     if !ignore_random && (is_random(main_chara) || is_random(sub_chara)) {
         println!("The random pane was selected");
 
-        let chara_hash = REGULAR_CHARA_HASHES
+        let chara_hash = hashes
             .choose(&mut rand::thread_rng())
             .copied()
             .unwrap_or(RANDOM_HASH);

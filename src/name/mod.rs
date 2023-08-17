@@ -24,7 +24,6 @@ pub fn get_tag_from_save(tag_index: u8) -> String {
         // Gets length of label by looking for null-terminating character.
         let mut len = 0;
         while *addr.add(len) != 0 {
-            println!("[{len}]: {}", *addr.add(len));
             len += 1;
         }
 
@@ -39,8 +38,6 @@ pub fn update_tag_for_player(param_1: u64, tag_index: *const u8) {
     unsafe {
         let player_id = (param_1 + 0x1d4) as *const u8;
         PLAYER_ID_TAGS[*player_id as usize] = *tag_index;
-
-        println!("Player #: {}, Tag: {}", *player_id, get_tag_from_save(*tag_index));
         call_original!(param_1, tag_index);
     }
 }
