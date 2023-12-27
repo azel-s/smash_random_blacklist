@@ -1,4 +1,4 @@
-# Blacklist Random
+# Smash Random Blacklist
 A plugin for Super Smash Bros. Ultimate which adds the ability to blacklist selected characters per tag when choosing random.
 Made with the help of CoolSonicKirby.
 
